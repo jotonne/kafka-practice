@@ -1,7 +1,70 @@
 package main
 
-import "fmt"
+import (
+	"encoding/json"
+	"flag"
+	"fmt"
+	"kafka-practice/producer/dto"
+	"time"
+
+	"github.com/confluentinc/confluent-kafka-go/kafka"
+	"github.com/google/uuid"
+)
+
+var (
+	kafkaServer  string
+	kafkaTopic   string
+	kafkaGroupID string
+)
 
 func main() {
-	fmt.Println("Hello Producer")
+	parse()
+
+	producer, err := kafka.NewProducer(&kafka.ConfigMap{
+		"bootstrap.servers": kafkaServer,
+		"group.id":          kafkaGroupID,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	count := 1
+	for {
+		time.Sleep(5 * time.Second)
+
+		uuid := uuid.New()
+		message := dto.Message{
+			ID:     uuid.String(),
+			Amount: 50000,
+		}
+
+		messageJson, err := json.Marshal(message)
+		if err != nil {
+			return
+		}
+
+		err = producer.Produce(&kafka.Message{
+			TopicPartition: kafka.TopicPartition{
+				Topic:     &kafkaTopic,
+				Partition: kafka.PartitionAny,
+			},
+			Value: messageJson,
+		}, nil)
+		if err != nil {
+			return
+		}
+
+		fmt.Printf("send %d\n", count)
+		count++
+		if count == 10 {
+			break
+		}
+	}
+}
+
+func parse() {
+	flag.StringVar(&kafkaServer, "kafkaServer", "localhost:9092", "kafka server")
+	flag.StringVar(&kafkaTopic, "kafkaTopic", "topic1", "topic name")
+	flag.StringVar(&kafkaGroupID, "kafkaGroupID", "group1", "group id")
+	flag.Parse()
 }
