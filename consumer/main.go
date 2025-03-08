@@ -38,15 +38,18 @@ func main() {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	sigchan := make(chan os.Signal, 1)
 	signal.Notify(sigchan, os.Interrupt, syscall.SIGTERM)
-
+	quitChan := make(chan struct{}, 1)
 	go func() {
+		defer func() {
+			quitChan <- struct{}{}
+		}()
 		for {
 			select {
 			case <-ctx.Done():
+				fmt.Println("notified cancel")
 				return
 			default:
 				msg, err := consumer.ReadMessage(1 * time.Second)
@@ -68,6 +71,8 @@ func main() {
 	}()
 
 	<-sigchan
+	cancel()
+	<-quitChan
 }
 
 func parse() {
