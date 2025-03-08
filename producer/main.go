@@ -5,6 +5,9 @@ import (
 	"flag"
 	"fmt"
 	"kafka-practice/producer/dto"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/confluentinc/confluent-kafka-go/kafka"
@@ -28,36 +31,44 @@ func main() {
 		panic(err)
 	}
 
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	canSend := true
 	count := 1
-	for {
-		time.Sleep(5 * time.Second)
+	for canSend {
+		select {
+		case <-sigChan:
+			canSend = false
+		default:
+			time.Sleep(5 * time.Second)
 
-		uuid := uuid.New()
-		message := dto.Message{
-			ID:     uuid.String(),
-			Amount: 50000,
-		}
+			uuid := uuid.New()
+			message := dto.Message{
+				ID:     uuid.String(),
+				Amount: 50000,
+			}
 
-		messageJson, err := json.Marshal(message)
-		if err != nil {
-			return
-		}
+			messageJson, err := json.Marshal(message)
+			if err != nil {
+				canSend = false
+			}
 
-		err = producer.Produce(&kafka.Message{
-			TopicPartition: kafka.TopicPartition{
-				Topic:     &kafkaTopic,
-				Partition: kafka.PartitionAny,
-			},
-			Value: messageJson,
-		}, nil)
-		if err != nil {
-			return
-		}
+			err = producer.Produce(&kafka.Message{
+				TopicPartition: kafka.TopicPartition{
+					Topic:     &kafkaTopic,
+					Partition: kafka.PartitionAny,
+				},
+				Value: messageJson,
+			}, nil)
+			if err != nil {
+				canSend = false
+			}
 
-		fmt.Printf("send %d\n", count)
-		count++
-		if count == 10 {
-			break
+			fmt.Printf("send %d\n", count)
+			count++
+			if count == 10 {
+				canSend = false
+			}
 		}
 	}
 }
